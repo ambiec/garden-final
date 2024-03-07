@@ -54,7 +54,10 @@ export default class Model {
 			if (this.animations) {
 				this.mixer = new AnimationMixer(gltf.scene)
 				gltf.animations.forEach((clip) => {
-					this.mixer.clipAction(clip).play()
+					const action = this.mixer.clipAction(clip)
+					if (clip.name === 'StillAnimation') {
+						action.play();
+					}
 				})
 				this.mixers.push(this.mixer)
 			}

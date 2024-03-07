@@ -1,9 +1,10 @@
 import './style.css'
 import * as THREE from 'three'
-import { addBoilerPlateMeshes } from './addMeshes'
-import { addLight } from './addLights'
+import { addBackground, addBoilerPlateMeshes } from './addMeshes'
+import { addLight, backLight } from './addLights'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 import Model from './model'
+import { post } from './post'
 
 
 const threeCanvas = document.querySelector('canvas.webgl')
@@ -24,6 +25,7 @@ const scene = new THREE.Scene()
 const meshes = {}
 const lights = {}
 const mixers = []
+const composer = post(scene, camera, renderer)
 
 var score;
 
@@ -34,10 +36,16 @@ function init() {
   document.body.appendChild(renderer.domElement)
 
   meshes.default = addBoilerPlateMeshes()
-  lights.default = addLight()
+  meshes.background = addBackground()
 
+  lights.default = addLight()
+  lights.background = backLight()
+
+  scene.add(meshes.background)
   scene.add(meshes.default)
+  scene.add(lights.background)
   scene.add(lights.default)
+  
 
   camera.position.set(0, 0, 5)
 
@@ -92,29 +100,38 @@ function instances() {
     meshes: meshes,
     replace: false,
     name: 'figure',
-    position: new THREE.Vector3(0, 0, -2)
+    position: new THREE.Vector3(0, 1, -2)
   })
   figure.init() //calling init in model.js
 }
+
 window.addEventListener('click', () => {
-  playSpecificAnimation(0);
+  playStillAnimation(0);
+
 }) 
 
-function playSpecificAnimation(index) {
+
+function playMoveAnimation(index) {
   // if (!mixer) return;
 
   // Stop all actions
-  mixers[0].stopAllAction();
-  const animationAction = mixers[0]._actions.find((action) => action._clip.name === 'MoveAnimation');
-  console.log(mixers[0]._action);
+  // mixers[0].stopAllAction();
+  const animationAction = mixers[0]._actions[1];
 
-  // animationAction.reset();
-  // animationAction.play();
+  animationAction.reset();
+  animationAction.play();
+}
 
-  // Get the specific animation action using its clip name or index
-  const action = mixers[0].clipAction('MoveAnimation');
-  // action.reset();  // Reset the action
-  // action.play();   // Play the action
+function playStillAnimation(index) {
+  // if (!mixer) return;
+
+  // Stop all actions
+  // mixers[0].stopAllAction();
+  const action = mixers[0]._actions[0];
+  // console.log(action);
+
+  action.reset();
+  action.play();
 }
 
 function resize() {
@@ -128,12 +145,19 @@ function resize() {
 function animate() {
   requestAnimationFrame(animate)
   const delta = clock.getDelta()
+  for (const mixer of mixers) {
+    mixer.update(delta)
+  }
   // controls.update()
   if (score > 20) {
     meshes.default.rotation.x += 0.01
     meshes.default.rotation.y -= 0.01
-  } 
-  renderer.render(scene, camera)
+    playMoveAnimation(0);
+  } else {
+    playStillAnimation(0);
+  }
+  // renderer.render(scene, camera)
+  composer.composer.render()
 }
 
 
@@ -218,7 +242,7 @@ function capture() {
   }
 
   if (score > 20) {
-    console.log('movement detected');
+    console.log('movement detected');    
   }
 
   // draw current capture normally over diff, ready for next time
