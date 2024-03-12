@@ -1,17 +1,16 @@
 import './style.css'
 import * as THREE from 'three'
 import { addBackground, addBoilerPlateMeshes } from './addMeshes'
-import { addLight, backLight } from './addLights'
+import { addLight } from './addLights'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 import Model from './model'
 import { post } from './post'
+import Stats from 'three/examples/jsm/libs/stats.module';
 
 
-const threeCanvas = document.querySelector('canvas.webgl')
 const renderer = new THREE.WebGLRenderer({
   antialias: true,
-  alpha: true,
-  canvas: threeCanvas 
+  alpha: true
 }) //cube meshes sometimes have jagged edges w/o antialias
 const camera = new THREE.PerspectiveCamera(
   75,
@@ -25,11 +24,28 @@ const scene = new THREE.Scene()
 const meshes = {}
 const lights = {}
 const mixers = []
-const composer = post(scene, camera, renderer)
 
-var score;
+const listener = new THREE.AudioListener()
+camera.add(listener)
+const sound1 = new THREE.PositionalAudio(listener)
+const sound2 = new THREE.PositionalAudio(listener)
+const audioLoader = new THREE.AudioLoader()
+
+const button = document.getElementById("button")
+
+// const composer = post(scene, camera, renderer)
+const { composer, bloomComposer, after, bloom } = post(scene, camera, renderer);
+console.log(bloom.strength);
+
+var score
+var grow = true
+var moving = false
+var soundOn = false
+
+const stats = new Stats();
 
 init()
+
 function init() {
   //set up our renderer default settings, add scene/canvas to webpage
   renderer.setSize(window.innerWidth, window.innerHeight)
@@ -39,17 +55,28 @@ function init() {
   meshes.background = addBackground()
 
   lights.default = addLight()
-  lights.background = backLight()
 
   scene.add(meshes.background)
-  scene.add(meshes.default)
-  scene.add(lights.background)
+  // scene.add(meshes.default)
   scene.add(lights.default)
-  
+
+  document.body.appendChild(stats.dom)
+
+  button.addEventListener('click', () => {
+    soundOn = true;
+		sound1.play()
+    button.innerHTML = "sound off"
+    button.addEventListener('click', () => {
+      soundOn = false;
+      sound1.stop()
+      button.innerHTML = "sound on"
+    })
+	})
 
   camera.position.set(0, 0, 5)
 
   // webcam()
+  initAudio()
   instances()
   resize()
   animate()
@@ -90,6 +117,27 @@ function init() {
 // 	scene.add(meshes.camTexture)
 // }
 
+function initAudio() {
+  audioLoader.load('/ambient.mp3', function(buffer){
+		sound1.setBuffer(buffer)
+		sound1.setRefDistance(3)
+		sound1.setRolloffFactor(5)
+		sound1.setMaxDistance(20)
+		sound1.setDistanceModel('exponential')
+	})
+
+  audioLoader.load('/footsteps.mp3', function(buffer){
+		sound2.setBuffer(buffer)
+		sound2.setRefDistance(3)
+		sound2.setRolloffFactor(5)
+		sound2.setMaxDistance(20)
+		sound2.setDistanceModel('exponential')
+	})
+}
+
+
+//MODEL//
+
 function instances() {
   const figure = new Model({
     //4 mandatories
@@ -98,66 +146,53 @@ function instances() {
     animationState: true,
     scene: scene,
     meshes: meshes,
-    replace: false,
+    replace: true,
+    replaceURL: '/final.jpeg',
     name: 'figure',
-    position: new THREE.Vector3(0, 1, -2)
+    position: new THREE.Vector3(0, 1, -3)
   })
   figure.init() //calling init in model.js
 }
 
-window.addEventListener('click', () => {
-  playStillAnimation(0);
-
-}) 
-
-
-function playMoveAnimation(index) {
-  // if (!mixer) return;
-
-  // Stop all actions
-  // mixers[0].stopAllAction();
-  const animationAction = mixers[0]._actions[1];
-
-  animationAction.reset();
-  animationAction.play();
-}
-
-function playStillAnimation(index) {
-  // if (!mixer) return;
-
-  // Stop all actions
-  // mixers[0].stopAllAction();
-  const action = mixers[0]._actions[0];
-  // console.log(action);
-
-  action.reset();
-  action.play();
-}
 
 function resize() {
   window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight)
+    bloomComposer.setSize(window.innerWidth, window.innerHeight)
+    composer.setSize(window.innerWidth, window.innerHeight)
     camera.aspect = window.innerWidth / window.innerHeight
     camera.updateProjectionMatrix()
   })
 }
 
 function animate() {
-  requestAnimationFrame(animate)
   const delta = clock.getDelta()
   for (const mixer of mixers) {
     mixer.update(delta)
   }
-  // controls.update()
-  if (score > 20) {
-    meshes.default.rotation.x += 0.01
-    meshes.default.rotation.y -= 0.01
-    playMoveAnimation(0);
+
+  if (!moving) {
+    if (bloom.strength < 0.01 || bloom.strength < 0.5 && grow){
+      grow = true
+      bloom.strength += delta*0.1
+    } else if (bloom.strength > 0) {
+      grow = false
+      bloom.strength -= delta*0.1
+    }
   } else {
-    playStillAnimation(0);
+    if (bloom.strength > 0.01) {
+      bloom.strength -= delta*0.2
+    }
   }
-  // renderer.render(scene, camera)
-  composer.composer.render()
+  
+  bloomComposer.render()
+
+  composer.render()
+
+  stats.update()
+
+  requestAnimationFrame(animate)
+
 }
 
 
@@ -166,6 +201,7 @@ function animate() {
 
 
 //MOTION DETECT//
+//#Source: https://github.com/lonekorean/diff-cam-feed/blob/master/client/js/vendor/diff-cam-engine.js
 
 var constraints = {
   audio: false,
@@ -205,12 +241,16 @@ var diffWidth = 64;
 var diffHeight = 48;
 var diffContext = diffCanvas.getContext('2d');
 
-var pixelDiffThreshold = 120;
+var pixelDiffThreshold = 70;
 var isReadyToDiff = false;
+var movementInitiated = false;
 
 canvas.style.transform = 'scale(-1, 1)'
 
-setInterval(capture, 300);
+setInterval(capture, 400);
+
+let debounceTimeout;
+const debounceDelay = 1000;
 
 
 function capture() {
@@ -227,6 +267,7 @@ function capture() {
     var rgba = diffImageData.data;
 
     score = 0;
+    
 
     for (var i = 0; i < rgba.length; i += 4) {
       var pixelDiff = rgba[i] * 0.3 + rgba[i + 1] * 0.6 + rgba[i + 2] * 0.1;
@@ -241,8 +282,36 @@ function capture() {
     }
   }
 
-  if (score > 20) {
-    console.log('movement detected');    
+  if (!debounceTimeout) {
+    clearTimeout(debounceTimeout);
+    // console.log(score);
+
+    if (score > 20) {
+      moving = true;
+      if (!mixers[0]._actions[1].isRunning() && moving) {
+        // console.log(mixers[0]._actions[0].isRunning())
+        const animationAction = mixers[0]._actions[1];
+        animationAction.play()
+        if (soundOn) {
+          sound2.play()
+        }
+
+      }
+    } else {
+      moving = false;
+      const movement = mixers[0]._actions[1];
+      movement.stop();
+      sound2.stop()
+      // console.log(mixers[0]._actions[0].isRunning());
+      if (!mixers[0]._actions[0].isRunning() && !moving) {
+        const animationAction = mixers[0]._actions[0];
+        animationAction.play();
+      }
+    }
+
+    debounceTimeout = setTimeout(() => {
+      debounceTimeout = null;
+    }, debounceDelay);
   }
 
   // draw current capture normally over diff, ready for next time

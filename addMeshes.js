@@ -10,14 +10,14 @@ import {
 const tLoader = new TextureLoader()
 
 export const addBackground = () => {
-    const backgroundGeometry = new PlaneGeometry(20, 16, 100, 100) //width, height, width segments, height segments
+    const backgroundGeometry = new PlaneGeometry(32, 26, 100, 100) //width, height, width segments, height segments
     const backgroundMaterial = new MeshStandardMaterial({
         map: tLoader.load('meadow.png'),
         // emissive: 0xffffff,
         // emissiveIntensity: 0.1
     })
     const backgroundMesh = new Mesh(backgroundGeometry, backgroundMaterial)
-    backgroundMesh.position.set(0, 0, -3)
+    backgroundMesh.position.set(0, 0, -5)
     return backgroundMesh
 }
 
