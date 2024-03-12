@@ -42,7 +42,7 @@ export default class Model {
 		this.loader.load(this.file, (gltf) => {
 			this.mesh = gltf.scene.children[0]
 			if (this.replaceMaterials) {
-				const replacementMaterial = new MeshMatcapMaterial({
+				const replacementMaterial = new MeshMatcapMaterial({ //meshstandard
 					matcap: this.defaultMatcap,
 				})
 				gltf.scene.traverse((child) => {

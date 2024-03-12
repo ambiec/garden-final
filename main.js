@@ -60,7 +60,7 @@ function init() {
   // scene.add(meshes.default)
   scene.add(lights.default)
 
-  document.body.appendChild(stats.dom)
+  // document.body.appendChild(stats.dom)
 
   button.addEventListener('click', () => {
     soundOn = true;
@@ -189,7 +189,7 @@ function animate() {
 
   composer.render()
 
-  stats.update()
+  // stats.update()
 
   requestAnimationFrame(animate)
 
